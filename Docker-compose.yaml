@@ -1,0 +1,91 @@
+version: '3.6'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.16.2
+    container_name: elasticsearch
+    restart: always
+    environment:
+      - node.name=elasticsearch
+      - discovery.type=single-node
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+    networks:
+      - elk
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.16.2
+    container_name: logstash
+    restart: always
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    ports:
+      - '5044:5044'
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:7.16.2
+    container_name: filebeat
+    restart: always
+    user: root
+    volumes:
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/log:/var/log:ro
+    depends_on:
+      - logstash
+    networks:
+      - elk
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.16.2
+    container_name: kibana
+    restart: always
+    ports:
+      - '5601:5601'
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.encryptedSavedObjects.encryptionKey=c7a9892de1ab17d9227b94d2075639ca
+      - xpack.reporting.capture.browser.chromium.disableSandbox=true
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:7.16.2
+    container_name: metricbeat
+    user: root
+    volumes:
+      - ./metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+    command: metricbeat -e -system.hostfs=/hostfs
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:7.16.2
+    container_name: apm-server
+    restart: always
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - '8200:8200'
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+
+volumes:
+  elastic_data:
+
+networks:
+  elk:
